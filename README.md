@@ -53,7 +53,7 @@ The runner then:
 4. Repeats for up to 8 assistant turns.
 5. Evaluates the final trace against scenario-specific scoring logic.
 
-Provider errors matching `provider returned error` are retried up to 3 times with backoff. Individual model requests time out after 30 seconds and are marked as failed.
+Provider errors matching `provider returned error` are retried up to 3 times with backoff. Model requests time out after 30 seconds by default, and the timeout can be overridden with `MODEL_REQUEST_TIMEOUT_SECONDS` in `.env`.
 
 ### Scoring details
 
@@ -65,11 +65,13 @@ The dashboard also distinguishes timeout failures visually so stalled runs are e
 
 ## Supported Providers
 
-ToolCall-15 accepts models from three OpenAI-compatible providers:
+ToolCall-15 accepts models from five OpenAI-compatible providers:
 
 - `openrouter`
 - `ollama`
 - `llamacpp`
+- `mlx`
+- `lmstudio`
 
 Model configuration uses comma-separated `provider:model` entries.
 
@@ -79,17 +81,21 @@ Examples:
 OPENROUTER_API_KEY=...
 OLLAMA_HOST=http://localhost:11434
 LLAMACPP_HOST=http://localhost:8080
+MLX_HOST=http://localhost:8082
+LMSTUDIO_HOST=http://localhost:1234
 
-LLM_MODELS=openrouter:openai/gpt-4.1,ollama:qwen3.5:4b,llamacpp:local-model
-LLM_MODELS_2=ollama:my-distilled-model
+LLM_MODELS=openrouter:openai/gpt-4.1,ollama:qwen3.5:4b,llamacpp:local-model,lmstudio:qwen3.5-0.8b
+LLM_MODELS_2=mlx:mlx-community/Qwen3.5-0.8B-8bit
 ```
 
 Notes:
 
 - `LLM_MODELS` is the primary table.
 - `LLM_MODELS_2` is an optional secondary table for a separate comparison group.
-- `OLLAMA_HOST` and `LLAMACPP_HOST` can be provided as a bare host, `/api`, or `/v1`. The app normalizes them to the OpenAI-compatible `/v1` base URL.
+- `OLLAMA_HOST`, `LLAMACPP_HOST`, `MLX_HOST`, and `LMSTUDIO_HOST` should be configured as raw hosts. The app normalizes them to the OpenAI-compatible `/v1` base URL.
+- `MODEL_REQUEST_TIMEOUT_SECONDS` controls the per-request timeout for every provider. The default is `30`.
 - Every configured `provider:model` must be unique across both env vars.
+- Provider support is transport-level. Actual benchmark quality still depends on the specific model's tool-calling behavior.
 
 ## Getting Started
 
@@ -125,7 +131,10 @@ npm run typecheck
 
 ## Dashboard Behavior
 
-- `Run Benchmark` runs every configured model against all 15 scenarios.
+- The runner advances scenario-by-scenario, not model-by-model. Every displayed model completes the current scenario before the dashboard moves to the next column.
+- The run button starts all configured models against all 15 scenarios.
+- The config button opens a modal for generation parameters: `temperature`, `top_p`, `top_k`, and `min_p`.
+- Benchmark config is stored in `localStorage` so the same browser keeps your latest settings between sessions.
 - `Shift+Click` a scenario header to rerun only that scenario across all displayed models.
 - Clicking a failed or timed-out cell opens the raw trace for that model and scenario.
 - If `LLM_MODELS_2` is empty, the second table stays hidden.

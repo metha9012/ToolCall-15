@@ -29,8 +29,7 @@ export type GenerationParams = {
   min_p?: number;
 };
 
-const MODEL_REQUEST_TIMEOUT_MS = 30_000;
-const MLX_REQUEST_TIMEOUT_MS = 180_000;
+const DEFAULT_MODEL_REQUEST_TIMEOUT_SECONDS = 30;
 
 type ChatResponse = {
   choices?: Array<{
@@ -97,8 +96,25 @@ function isTimeoutError(error: unknown): boolean {
   return error.name === "TimeoutError" || error.name === "AbortError";
 }
 
+function resolveRequestTimeoutMs(): number {
+  const rawTimeout = process.env.MODEL_REQUEST_TIMEOUT_SECONDS?.trim();
+
+  if (!rawTimeout) {
+    return DEFAULT_MODEL_REQUEST_TIMEOUT_SECONDS * 1000;
+  }
+
+  const parsed = Number.parseInt(rawTimeout, 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MODEL_REQUEST_TIMEOUT_SECONDS * 1000;
+  }
+
+  return parsed * 1000;
+}
+
 export async function callModel(model: ModelConfig, messages: ModelMessage[], params?: GenerationParams): Promise<AssistantResponse> {
   const baseUrl = normalizeBaseUrl(model.baseUrl);
+  const requestTimeoutMs = resolveRequestTimeoutMs();
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
   };
@@ -135,11 +151,11 @@ export async function callModel(model: ModelConfig, messages: ModelMessage[], pa
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(model.provider === "mlx" || model.provider === "lmstudio" ? MLX_REQUEST_TIMEOUT_MS : MODEL_REQUEST_TIMEOUT_MS)
+      signal: AbortSignal.timeout(requestTimeoutMs)
     });
   } catch (error) {
     if (isTimeoutError(error)) {
-      throw new Error(`Request timed out after ${(model.provider === "mlx" || model.provider === "lmstudio" ? MLX_REQUEST_TIMEOUT_MS : MODEL_REQUEST_TIMEOUT_MS) / 1000}s.`);
+      throw new Error(`Request timed out after ${requestTimeoutMs / 1000}s.`);
     }
 
     throw error;
