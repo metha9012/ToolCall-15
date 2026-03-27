@@ -245,14 +245,13 @@ async function runScenarioForModel(
   };
 }
 
-export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedScenarioIds?: string[], params?: GenerationParams, batchSize?: number): Promise<void> {
+export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedScenarioIds?: string[], params?: GenerationParams): Promise<void> {
   const scenarios = resolveScenarios(requestedScenarioIds);
   const resultsByModel: Record<string, ModelScenarioResult[]> = Object.fromEntries(
     models.map((model) => [model.id, [] as ModelScenarioResult[]])
   );
   const cloudModels = models.filter((model) => model.provider === "openrouter");
   const localModels = models.filter((model) => model.provider !== "openrouter");
-  const isLocalBatched = (model: ModelConfig) => model.provider === "mlx" || model.provider === "lmstudio";
 
   await emit({
     type: "run_started",
@@ -295,7 +294,7 @@ export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedS
 
       promises.push(
         (async () => {
-          for (const model of localModels.filter((m) => !isLocalBatched(m))) {
+          for (const model of localModels) {
             const { modelId, scenarioId, result } = await runScenario(model, scenario);
             await emitResult(modelId, scenarioId, result);
           }
@@ -308,30 +307,6 @@ export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedS
         type: "scenario_finished",
         scenarioId: scenario.id
       });
-    }
-
-    for (const model of localModels.filter(isLocalBatched)) {
-      const MLX_BATCH_SIZE = batchSize ?? 4;
-
-      for (let batchStart = 0; batchStart < scenarios.length; batchStart += MLX_BATCH_SIZE) {
-        const batch = scenarios.slice(batchStart, batchStart + MLX_BATCH_SIZE);
-        const results = await Promise.all(
-          batch.map(async (scenario) => {
-            const result = await runScenarioForModel(model, scenario, emit, params);
-            return { scenarioId: scenario.id, result };
-          })
-        );
-
-        for (const { scenarioId, result } of results) {
-          resultsByModel[model.id].push(result);
-          await emit({
-            type: "scenario_result",
-            modelId: model.id,
-            scenarioId,
-            result
-          });
-        }
-      }
     }
 
     const scores = Object.fromEntries(

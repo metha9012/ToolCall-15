@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Play, SlidersHorizontal, X } from "lucide-react";
 
 import { scoreModelResults, type BenchmarkCategory, type ModelScenarioResult, type ModelScoreSummary } from "@/lib/benchmark";
 import type { PublicModelConfig } from "@/lib/models";
 import type { RunEvent } from "@/lib/orchestrator";
-
-import { OrchestratorDialog } from "@/components/orchestrator-dialog";
 
 type ScenarioCard = {
   id: string;
@@ -38,8 +37,21 @@ type FailureDetails = {
 };
 
 type ScoreSummaryMap = Record<string, ModelScoreSummary>;
+type GenerationConfig = {
+  temperature: number;
+  top_p: number | undefined;
+  top_k: number | undefined;
+  min_p: number | undefined;
+};
 
 const QWEN_VARIANT_ORDER = ["0.8b", "2b", "4b", "9b", "27b", "35b", "122b", "397b"];
+const BENCHMARK_CONFIG_STORAGE_KEY = "toolcall15.benchmark-config";
+const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
+  temperature: 0,
+  top_p: undefined,
+  top_k: undefined,
+  min_p: undefined
+};
 
 function buildInitialCells(models: PublicModelConfig[], scenarios: ScenarioCard[]): Record<string, Record<string, CellState>> {
   return Object.fromEntries(
@@ -141,6 +153,25 @@ function isTimeoutSummary(summary: string | undefined): boolean {
   return summary?.toLowerCase().includes("timed out") ?? false;
 }
 
+function parseStoredGenerationConfig(raw: string | null): GenerationConfig | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<GenerationConfig>;
+
+    return {
+      temperature: typeof parsed.temperature === "number" && Number.isFinite(parsed.temperature) ? parsed.temperature : 0,
+      top_p: typeof parsed.top_p === "number" && Number.isFinite(parsed.top_p) ? parsed.top_p : undefined,
+      top_k: typeof parsed.top_k === "number" && Number.isFinite(parsed.top_k) ? parsed.top_k : undefined,
+      min_p: typeof parsed.min_p === "number" && Number.isFinite(parsed.min_p) ? parsed.min_p : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+
 function FailureDialog({ details, onClose }: { details: FailureDetails | null; onClose: () => void }) {
   if (!details) {
     return null;
@@ -158,8 +189,8 @@ function FailureDialog({ details, onClose }: { details: FailureDetails | null; o
               {details.scenarioId} · {details.modelName}
             </h2>
           </div>
-          <button className="ghost-button" type="button" onClick={onClose}>
-            Close
+          <button className="icon-button ghost-button" type="button" onClick={onClose} aria-label="Close configuration" title="Close">
+            <X aria-hidden="true" size={18} />
           </button>
         </div>
         <div className="dialog-summary">
@@ -167,6 +198,105 @@ function FailureDialog({ details, onClose }: { details: FailureDetails | null; o
           <p>{details.summary}</p>
         </div>
         <pre className="trace-log">{details.rawLog}</pre>
+      </div>
+    </div>
+  );
+}
+
+function ConfigDialog({
+  open,
+  onClose,
+  genParams,
+  setGenParams
+}: {
+  open: boolean;
+  onClose: () => void;
+  genParams: GenerationConfig;
+  setGenParams: React.Dispatch<React.SetStateAction<GenerationConfig>>;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="dialog-shell config-dialog" role="dialog" aria-modal="true" aria-labelledby="config-title">
+        <div className="dialog-header">
+          <div>
+            <p className="eyebrow">Benchmark Config</p>
+            <h2 id="config-title">Generation Parameters</h2>
+          </div>
+          <button className="icon-button ghost-button" type="button" onClick={onClose} aria-label="Close configuration" title="Close">
+            <X aria-hidden="true" size={18} />
+          </button>
+        </div>
+        <div className="config-grid dialog-config-grid">
+          <label className="config-field">
+            <span className="config-label">Temperature</span>
+            <input
+              className="config-input"
+              type="number"
+              step="0.1"
+              min="0"
+              max="2"
+              value={genParams.temperature}
+              onChange={(e) => setGenParams((prev) => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
+            />
+          </label>
+          <label className="config-field">
+            <span className="config-label">Top P</span>
+            <input
+              className="config-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              placeholder="default"
+              value={genParams.top_p ?? ""}
+              onChange={(e) =>
+                setGenParams((prev) => {
+                  const value = e.target.value === "" ? undefined : parseFloat(e.target.value);
+                  return { ...prev, top_p: value };
+                })
+              }
+            />
+          </label>
+          <label className="config-field">
+            <span className="config-label">Top K</span>
+            <input
+              className="config-input"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="default"
+              value={genParams.top_k ?? ""}
+              onChange={(e) =>
+                setGenParams((prev) => {
+                  const value = e.target.value === "" ? undefined : parseInt(e.target.value, 10);
+                  return { ...prev, top_k: value };
+                })
+              }
+            />
+          </label>
+          <label className="config-field">
+            <span className="config-label">Min P</span>
+            <input
+              className="config-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              placeholder="default"
+              value={genParams.min_p ?? ""}
+              onChange={(e) =>
+                setGenParams((prev) => {
+                  const value = e.target.value === "" ? undefined : parseFloat(e.target.value);
+                  return { ...prev, min_p: value };
+                })
+              }
+            />
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -180,12 +310,11 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
   const [runnerStatus, setRunnerStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [currentScenarioId, setCurrentScenarioId] = useState(scenarios[0]?.id ?? "");
   const [focusedScenarioId, setFocusedScenarioId] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [logs, setLogs] = useState<Array<{ id: string; message: string }>>([]);
   const [failureDetails, setFailureDetails] = useState<FailureDetails | null>(null);
-  const [showConfig, setShowConfig] = useState(false);
-  const [genParams, setGenParams] = useState({ temperature: 0, top_p: undefined as number | undefined, top_k: undefined as number | undefined, min_p: undefined as number | undefined });
-  const [batchSize, setBatchSize] = useState(4);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [genParams, setGenParams] = useState<GenerationConfig>(DEFAULT_GENERATION_CONFIG);
+  const storageReadyRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const displayPrimaryModels = useMemo(
@@ -230,6 +359,24 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
       eventSourceRef.current?.close();
     };
   }, []);
+
+  useEffect(() => {
+    const storedConfig = parseStoredGenerationConfig(window.localStorage.getItem(BENCHMARK_CONFIG_STORAGE_KEY));
+
+    if (storedConfig) {
+      setGenParams(storedConfig);
+    }
+
+    storageReadyRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!storageReadyRef.current) {
+      return;
+    }
+
+    window.localStorage.setItem(BENCHMARK_CONFIG_STORAGE_KEY, JSON.stringify(genParams));
+  }, [genParams]);
 
   function appendLog(message: string) {
     setLogs((previous) => {
@@ -396,8 +543,6 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
       params.set("min_p", String(genParams.min_p));
     }
 
-    params.set("batch_size", String(batchSize));
-
     const source = new EventSource(`/api/run?${params.toString()}`);
     eventSourceRef.current = source;
 
@@ -527,101 +672,26 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
         </div>
         <div className="hero-actions">
           <button
-            className="primary-button"
+            className="icon-button primary-button"
             type="button"
             onClick={() => startRun()}
             disabled={allModels.length === 0 || runnerStatus === "running"}
+            aria-label={runnerStatus === "running" ? "Benchmark running" : "Run benchmark"}
+            title={runnerStatus === "running" ? "Benchmark running" : "Run benchmark"}
           >
-            {runnerStatus === "running" ? "Benchmark Running" : "Run Benchmark"}
+            <Play aria-hidden="true" size={18} />
           </button>
           <button
-            className="ghost-button"
+            className="icon-button ghost-button"
             type="button"
-            onClick={() => setShowConfig((prev) => !prev)}
+            onClick={() => setConfigOpen(true)}
+            aria-label="Open benchmark configuration"
             title="Generation parameters"
           >
-            {showConfig ? "Hide Config" : "Config"}
+            <SlidersHorizontal aria-hidden="true" size={18} />
           </button>
         </div>
       </section>
-
-      {showConfig && (
-        <section className="config-panel">
-          <div className="config-grid">
-            <label className="config-field">
-              <span className="config-label">Temperature</span>
-              <input
-                className="config-input"
-                type="number"
-                step="0.1"
-                min="0"
-                max="2"
-                value={genParams.temperature}
-                onChange={(e) => setGenParams((prev) => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
-              />
-            </label>
-            <label className="config-field">
-              <span className="config-label">Top P</span>
-              <input
-                className="config-input"
-                type="number"
-                step="0.05"
-                min="0"
-                max="1"
-                placeholder="default"
-                value={genParams.top_p ?? ""}
-                onChange={(e) => setGenParams((prev) => {
-                  const val = e.target.value === "" ? undefined : parseFloat(e.target.value);
-                  return { ...prev, top_p: val };
-                })}
-              />
-            </label>
-            <label className="config-field">
-              <span className="config-label">Top K</span>
-              <input
-                className="config-input"
-                type="number"
-                step="1"
-                min="0"
-                placeholder="default"
-                value={genParams.top_k ?? ""}
-                onChange={(e) => setGenParams((prev) => {
-                  const val = e.target.value === "" ? undefined : parseInt(e.target.value, 10);
-                  return { ...prev, top_k: val };
-                })}
-              />
-            </label>
-            <label className="config-field">
-              <span className="config-label">Min P</span>
-              <input
-                className="config-input"
-                type="number"
-                step="0.05"
-                min="0"
-                max="1"
-                placeholder="default"
-                value={genParams.min_p ?? ""}
-                onChange={(e) => setGenParams((prev) => {
-                  const val = e.target.value === "" ? undefined : parseFloat(e.target.value);
-                  return { ...prev, min_p: val };
-                })}
-              />
-            </label>
-            <label className="config-field">
-              <span className="config-label">Batch Size</span>
-              <input
-                className="config-input"
-                type="number"
-                step="1"
-                min="1"
-                max="15"
-                value={batchSize}
-                onChange={(e) => setBatchSize(parseInt(e.target.value, 10) || 4)}
-              />
-            </label>
-          </div>
-        </section>
-      )}
 
       <section className="scenario-focus">
         <div className="scenario-focus-header">
@@ -655,14 +725,7 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
       {renderModelTable("LLM_MODELS", displayPrimaryModels)}
       {secondaryModels.length > 0 ? renderModelTable("LLM_MODELS_2", displaySecondaryModels) : null}
 
-      <OrchestratorDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        currentScenarioLabel={currentScenarioLabel}
-        status={runnerStatus}
-        logs={logs}
-      />
-
+      <ConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} genParams={genParams} setGenParams={setGenParams} />
       <FailureDialog details={failureDetails} onClose={() => setFailureDetails(null)} />
     </>
   );

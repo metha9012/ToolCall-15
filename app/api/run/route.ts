@@ -33,9 +33,6 @@ export async function GET(request: Request) {
     params.min_p = parseFloat(minP);
   }
 
-  const batchSizeParam = searchParams.get("batch_size");
-  const batchSize = batchSizeParam !== null ? parseInt(batchSizeParam, 10) : undefined;
-
   let models = [] as ReturnType<typeof getModelConfigs>;
   let configError: string | null = null;
 
@@ -71,7 +68,7 @@ export async function GET(request: Request) {
       }
 
       try {
-        await runBenchmark(models, emit, requestedScenarioIds, params, batchSize);
+        await runBenchmark(models, emit, requestedScenarioIds, params);
       } catch (error) {
         await emit({
           type: "run_error",
