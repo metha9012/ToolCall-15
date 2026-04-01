@@ -250,8 +250,6 @@ export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedS
   const resultsByModel: Record<string, ModelScenarioResult[]> = Object.fromEntries(
     models.map((model) => [model.id, [] as ModelScenarioResult[]])
   );
-  const cloudModels = models.filter((model) => model.provider === "openrouter");
-  const localModels = models.filter((model) => model.provider !== "openrouter");
 
   await emit({
     type: "run_started",
@@ -279,29 +277,10 @@ export async function runBenchmark(models: ModelConfig[], emit: Emit, requestedS
         total: scenarios.length
       });
 
-      const promises: Promise<void>[] = [];
-
-      if (cloudModels.length > 0) {
-        promises.push(
-          (async () => {
-            const results = await Promise.all(cloudModels.map((model) => runScenario(model, scenario)));
-            for (const { modelId, scenarioId, result } of results) {
-              await emitResult(modelId, scenarioId, result);
-            }
-          })()
-        );
+      const results = await Promise.all(models.map((model) => runScenario(model, scenario)));
+      for (const { modelId, scenarioId, result } of results) {
+        await emitResult(modelId, scenarioId, result);
       }
-
-      promises.push(
-        (async () => {
-          for (const model of localModels) {
-            const { modelId, scenarioId, result } = await runScenario(model, scenario);
-            await emitResult(modelId, scenarioId, result);
-          }
-        })()
-      );
-
-      await Promise.all(promises);
 
       await emit({
         type: "scenario_finished",
