@@ -791,7 +791,7 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
   return (
     <>
       <section className="hero-panel">
-        <div>
+        <div className="hero-main">
           <h1 className="hero-title">
             <input
               className="hero-title-input"
