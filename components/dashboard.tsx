@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Play, SlidersHorizontal, X } from "lucide-react";
 
 import { scoreModelResults, type BenchmarkCategory, type ModelScenarioResult, type ModelScoreSummary } from "@/lib/benchmark";
@@ -42,16 +42,27 @@ type GenerationConfig = {
   top_p: number | undefined;
   top_k: number | undefined;
   min_p: number | undefined;
+  repetition_penalty: number | undefined;
+  tools_format: "default" | "lfm";
 };
 
 const QWEN_VARIANT_ORDER = ["0.8b", "2b", "4b", "9b", "27b", "35b", "122b", "397b"];
 const BENCHMARK_CONFIG_STORAGE_KEY = "toolcall15.benchmark-config";
+const BENCHMARK_TITLE_STORAGE_KEY = "toolcall15.benchmark-title";
+const DEFAULT_BENCHMARK_TITLE = "ToolCall-15 LLM Tool Use Benchmark";
 const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
   temperature: 0,
   top_p: undefined,
   top_k: undefined,
-  min_p: undefined
+  min_p: undefined,
+  repetition_penalty: undefined,
+  tools_format: "default"
 };
+const preferenceStoreListeners = new Set<() => void>();
+let cachedGenerationConfigRaw: string | null | undefined;
+let cachedGenerationConfigSnapshot: GenerationConfig = DEFAULT_GENERATION_CONFIG;
+let cachedBenchmarkTitleRaw: string | null | undefined;
+let cachedBenchmarkTitleSnapshot = DEFAULT_BENCHMARK_TITLE;
 
 function buildInitialCells(models: PublicModelConfig[], scenarios: ScenarioCard[]): Record<string, Record<string, CellState>> {
   return Object.fromEntries(
@@ -165,11 +176,97 @@ function parseStoredGenerationConfig(raw: string | null): GenerationConfig | nul
       temperature: typeof parsed.temperature === "number" && Number.isFinite(parsed.temperature) ? parsed.temperature : 0,
       top_p: typeof parsed.top_p === "number" && Number.isFinite(parsed.top_p) ? parsed.top_p : undefined,
       top_k: typeof parsed.top_k === "number" && Number.isFinite(parsed.top_k) ? parsed.top_k : undefined,
-      min_p: typeof parsed.min_p === "number" && Number.isFinite(parsed.min_p) ? parsed.min_p : undefined
+      min_p: typeof parsed.min_p === "number" && Number.isFinite(parsed.min_p) ? parsed.min_p : undefined,
+      repetition_penalty: typeof parsed.repetition_penalty === "number" && Number.isFinite(parsed.repetition_penalty) ? parsed.repetition_penalty : undefined,
+      tools_format: parsed.tools_format === "lfm" ? "lfm" : "default"
     };
   } catch {
     return null;
   }
+}
+
+function parseStoredBenchmarkTitle(raw: string | null): string | null {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function subscribeToPreferenceStore(listener: () => void): () => void {
+  preferenceStoreListeners.add(listener);
+
+  if (typeof window === "undefined") {
+    return () => {
+      preferenceStoreListeners.delete(listener);
+    };
+  }
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === BENCHMARK_CONFIG_STORAGE_KEY || event.key === BENCHMARK_TITLE_STORAGE_KEY) {
+      listener();
+    }
+  };
+
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    preferenceStoreListeners.delete(listener);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function emitPreferenceStoreChange(): void {
+  for (const listener of preferenceStoreListeners) {
+    listener();
+  }
+}
+
+function readStoredGenerationConfig(): GenerationConfig {
+  if (typeof window === "undefined") {
+    return DEFAULT_GENERATION_CONFIG;
+  }
+
+  const raw = window.localStorage.getItem(BENCHMARK_CONFIG_STORAGE_KEY);
+
+  if (raw === cachedGenerationConfigRaw) {
+    return cachedGenerationConfigSnapshot;
+  }
+
+  cachedGenerationConfigRaw = raw;
+  cachedGenerationConfigSnapshot = parseStoredGenerationConfig(raw) ?? DEFAULT_GENERATION_CONFIG;
+  return cachedGenerationConfigSnapshot;
+}
+
+function readStoredBenchmarkTitle(): string {
+  if (typeof window === "undefined") {
+    return DEFAULT_BENCHMARK_TITLE;
+  }
+
+  const raw = window.localStorage.getItem(BENCHMARK_TITLE_STORAGE_KEY);
+
+  if (raw === cachedBenchmarkTitleRaw) {
+    return cachedBenchmarkTitleSnapshot;
+  }
+
+  cachedBenchmarkTitleRaw = raw;
+  cachedBenchmarkTitleSnapshot = parseStoredBenchmarkTitle(raw) ?? DEFAULT_BENCHMARK_TITLE;
+  return cachedBenchmarkTitleSnapshot;
+}
+
+function persistGenerationConfig(nextConfig: GenerationConfig): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(BENCHMARK_CONFIG_STORAGE_KEY, JSON.stringify(nextConfig));
+  emitPreferenceStoreChange();
+}
+
+function persistBenchmarkTitle(nextTitle: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(BENCHMARK_TITLE_STORAGE_KEY, nextTitle);
+  emitPreferenceStoreChange();
 }
 
 function FailureDialog({ details, onClose }: { details: FailureDetails | null; onClose: () => void }) {
@@ -219,8 +316,8 @@ function ConfigDialog({
   }
 
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <div className="dialog-shell config-dialog" role="dialog" aria-modal="true" aria-labelledby="config-title">
+    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="dialog-shell config-dialog" role="dialog" aria-modal="true" aria-labelledby="config-title" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <div>
             <p className="eyebrow">Benchmark Config</p>
@@ -296,6 +393,34 @@ function ConfigDialog({
               }
             />
           </label>
+          <label className="config-field">
+            <span className="config-label">Repetition Penalty</span>
+            <input
+              className="config-input"
+              type="number"
+              step="0.05"
+              min="0"
+              placeholder="default"
+              value={genParams.repetition_penalty ?? ""}
+              onChange={(e) =>
+                setGenParams((prev) => {
+                  const value = e.target.value === "" ? undefined : parseFloat(e.target.value);
+                  return { ...prev, repetition_penalty: value };
+                })
+              }
+            />
+          </label>
+          <label className="config-field config-field-wide">
+            <span className="config-label">Tools Format</span>
+            <select
+              className="config-input"
+              value={genParams.tools_format}
+              onChange={(e) => setGenParams((prev) => ({ ...prev, tools_format: e.target.value as "default" | "lfm" }))}
+            >
+              <option value="default">default — OpenAI tools parameter</option>
+              <option value="lfm">lfm — experimental prompt injection mode</option>
+            </select>
+          </label>
         </div>
       </div>
     </div>
@@ -313,9 +438,19 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
   const [logs, setLogs] = useState<Array<{ id: string; message: string }>>([]);
   const [failureDetails, setFailureDetails] = useState<FailureDetails | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
-  const [genParams, setGenParams] = useState<GenerationConfig>(DEFAULT_GENERATION_CONFIG);
-  const storageReadyRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const genParams = useSyncExternalStore(subscribeToPreferenceStore, readStoredGenerationConfig, () => DEFAULT_GENERATION_CONFIG);
+  const benchmarkTitle = useSyncExternalStore(subscribeToPreferenceStore, readStoredBenchmarkTitle, () => DEFAULT_BENCHMARK_TITLE);
+
+  const setGenParams: React.Dispatch<React.SetStateAction<GenerationConfig>> = (value) => {
+    const nextConfig = typeof value === "function" ? value(readStoredGenerationConfig()) : value;
+    persistGenerationConfig(nextConfig);
+  };
+
+  const setBenchmarkTitle: React.Dispatch<React.SetStateAction<string>> = (value) => {
+    const nextTitle = typeof value === "function" ? value(readStoredBenchmarkTitle()) : value;
+    persistBenchmarkTitle(nextTitle);
+  };
 
   const displayPrimaryModels = useMemo(
     () => [...primaryModels].sort((left, right) => variantOrderIndex(left.model) - variantOrderIndex(right.model)),
@@ -359,24 +494,6 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
       eventSourceRef.current?.close();
     };
   }, []);
-
-  useEffect(() => {
-    const storedConfig = parseStoredGenerationConfig(window.localStorage.getItem(BENCHMARK_CONFIG_STORAGE_KEY));
-
-    if (storedConfig) {
-      setGenParams(storedConfig);
-    }
-
-    storageReadyRef.current = true;
-  }, []);
-
-  useEffect(() => {
-    if (!storageReadyRef.current) {
-      return;
-    }
-
-    window.localStorage.setItem(BENCHMARK_CONFIG_STORAGE_KEY, JSON.stringify(genParams));
-  }, [genParams]);
 
   function appendLog(message: string) {
     setLogs((previous) => {
@@ -543,6 +660,14 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
       params.set("min_p", String(genParams.min_p));
     }
 
+    if (genParams.repetition_penalty !== undefined) {
+      params.set("repetition_penalty", String(genParams.repetition_penalty));
+    }
+
+    if (genParams.tools_format !== "default") {
+      params.set("tools_format", genParams.tools_format);
+    }
+
     const source = new EventSource(`/api/run?${params.toString()}`);
     eventSourceRef.current = source;
 
@@ -666,8 +791,26 @@ export function Dashboard({ primaryModels, secondaryModels, scenarios, configErr
   return (
     <>
       <section className="hero-panel">
-        <div>
-          <h1>ToolCall-15 LLM Tool Use Benchmark</h1>
+        <div className="hero-main">
+          <h1 className="hero-title">
+            <input
+              className="hero-title-input"
+              type="text"
+              value={benchmarkTitle}
+              onChange={(event) => setBenchmarkTitle(event.target.value)}
+              onBlur={() => setBenchmarkTitle((previous) => previous.trim() || DEFAULT_BENCHMARK_TITLE)}
+              aria-label="Benchmark title"
+              spellCheck={false}
+            />
+          </h1>
+          <p className="params-summary">
+            <span>temp: {genParams.temperature}</span>
+            <span>top_p: {genParams.top_p ?? "—"}</span>
+            <span>top_k: {genParams.top_k ?? "—"}</span>
+            <span>min_p: {genParams.min_p ?? "—"}</span>
+            <span>rep_penalty: {genParams.repetition_penalty ?? "—"}</span>
+            <span>tools: {genParams.tools_format}</span>
+          </p>
           {configError ? <p className="config-error">{configError}</p> : null}
         </div>
         <div className="hero-actions">

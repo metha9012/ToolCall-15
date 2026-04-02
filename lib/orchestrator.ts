@@ -174,6 +174,9 @@ async function runScenarioForModel(
       state.assistantMessages.push(response.content);
       messages.push(toAssistantMessage(response));
       traceLines.push(`assistant_turn_${turn}=${response.content || "[tool_calls_only]"}`);
+      if (response.reasoning) {
+        traceLines.push(`assistant_reasoning_${turn}=${response.reasoning}`);
+      }
 
       if (response.toolCalls.length === 0) {
         state.finalAnswer = response.content;
