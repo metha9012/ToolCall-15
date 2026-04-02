@@ -59,6 +59,10 @@ const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
   tools_format: "default"
 };
 const preferenceStoreListeners = new Set<() => void>();
+let cachedGenerationConfigRaw: string | null | undefined;
+let cachedGenerationConfigSnapshot: GenerationConfig = DEFAULT_GENERATION_CONFIG;
+let cachedBenchmarkTitleRaw: string | null | undefined;
+let cachedBenchmarkTitleSnapshot = DEFAULT_BENCHMARK_TITLE;
 
 function buildInitialCells(models: PublicModelConfig[], scenarios: ScenarioCard[]): Record<string, Record<string, CellState>> {
   return Object.fromEntries(
@@ -220,7 +224,15 @@ function readStoredGenerationConfig(): GenerationConfig {
     return DEFAULT_GENERATION_CONFIG;
   }
 
-  return parseStoredGenerationConfig(window.localStorage.getItem(BENCHMARK_CONFIG_STORAGE_KEY)) ?? DEFAULT_GENERATION_CONFIG;
+  const raw = window.localStorage.getItem(BENCHMARK_CONFIG_STORAGE_KEY);
+
+  if (raw === cachedGenerationConfigRaw) {
+    return cachedGenerationConfigSnapshot;
+  }
+
+  cachedGenerationConfigRaw = raw;
+  cachedGenerationConfigSnapshot = parseStoredGenerationConfig(raw) ?? DEFAULT_GENERATION_CONFIG;
+  return cachedGenerationConfigSnapshot;
 }
 
 function readStoredBenchmarkTitle(): string {
@@ -228,7 +240,15 @@ function readStoredBenchmarkTitle(): string {
     return DEFAULT_BENCHMARK_TITLE;
   }
 
-  return parseStoredBenchmarkTitle(window.localStorage.getItem(BENCHMARK_TITLE_STORAGE_KEY)) ?? DEFAULT_BENCHMARK_TITLE;
+  const raw = window.localStorage.getItem(BENCHMARK_TITLE_STORAGE_KEY);
+
+  if (raw === cachedBenchmarkTitleRaw) {
+    return cachedBenchmarkTitleSnapshot;
+  }
+
+  cachedBenchmarkTitleRaw = raw;
+  cachedBenchmarkTitleSnapshot = parseStoredBenchmarkTitle(raw) ?? DEFAULT_BENCHMARK_TITLE;
+  return cachedBenchmarkTitleSnapshot;
 }
 
 function persistGenerationConfig(nextConfig: GenerationConfig): void {
