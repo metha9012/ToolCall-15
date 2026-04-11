@@ -186,8 +186,7 @@ function parseStoredGenerationConfig(raw: string | null): GenerationConfig | nul
 }
 
 function parseStoredBenchmarkTitle(raw: string | null): string | null {
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed : null;
+  return raw;
 }
 
 function subscribeToPreferenceStore(listener: () => void): () => void {

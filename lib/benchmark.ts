@@ -951,7 +951,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       if (
         searchCall &&
         calculatorCall &&
-        includesText(searchCall.arguments.query, "population of iceland") &&
+        mentionsAll(asString(searchCall.arguments.query), ["iceland", "population"]) &&
         asString(calculatorCall.arguments.expression).replaceAll(",", "").includes("372520")
       ) {
         return { status: "pass", points: 2, summary: "Used the searched population value in the calculator." };

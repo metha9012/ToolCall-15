@@ -46,7 +46,7 @@ export type RunEvent =
       message: string;
     };
 
-type Emit = (event: RunEvent) => Promise<void> | void;
+export type Emit = (event: RunEvent) => Promise<void> | void;
 const PROVIDER_ERROR_RETRY_PATTERN = /provider returned error/i;
 const MAX_PROVIDER_ERROR_ATTEMPTS = 3;
 
@@ -67,9 +67,21 @@ function resolveScenarios(requestedScenarioIds?: string[]): ScenarioDefinition[]
   return selected;
 }
 
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
+function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+
+    const abort = () => {
+      clearTimeout(timeout);
+      reject(new Error("Request aborted."));
+    };
+
+    if (signal) {
+      signal.addEventListener("abort", abort, { once: true });
+    }
   });
 }
 
@@ -115,7 +127,11 @@ function formatScenarioTrace(
     .join("\n");
 }
 
-async function runScenarioForModel(
+function isCancellationError(error: unknown): boolean {
+  return error instanceof Error && /request aborted/i.test(error.message);
+}
+
+export async function runScenarioForModel(
   model: ModelConfig,
   scenario: ScenarioDefinition,
   emit: Emit,
@@ -163,7 +179,7 @@ async function runScenarioForModel(
             scenarioId: scenario.id,
             message: `Provider returned error, retrying (${attempt + 1}/${MAX_PROVIDER_ERROR_ATTEMPTS})`
           });
-          await sleep(750 * attempt);
+          await sleep(750 * attempt, params?.signal);
         }
       }
 
@@ -218,6 +234,10 @@ async function runScenarioForModel(
       }
     }
   } catch (error) {
+    if (isCancellationError(error)) {
+      throw error;
+    }
+
     const summary = error instanceof Error ? error.message : "Unknown model execution error.";
     traceLines.push(`error=${summary}`);
 
