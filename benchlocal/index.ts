@@ -22,6 +22,9 @@ const manifest = definePluginManifest({
   version: "0.1.0",
   description: "Tool-use benchmark with 15 fixed scenarios and tool-call loop scoring.",
   entry: "./dist/benchlocal/index.js",
+  samplingDefaults: {
+    temperature: 0
+  },
   theme: {
     accent: "#c96b4a"
   },

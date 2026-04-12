@@ -484,10 +484,13 @@ export async function callModel(model: ModelConfig, messages: ModelMessage[], pa
   const useLfmFormat = (params?.tools_format ?? "default") === "lfm";
   const body: Record<string, unknown> = {
     model: model.model,
-    temperature: params?.temperature ?? 0,
     messages: useLfmFormat ? buildLfmMessages(messages) : messages,
     ...(useLfmFormat ? {} : { parallel_tool_calls: true, tool_choice: "auto", tools: UNIVERSAL_TOOLS })
   };
+
+  if (params?.temperature !== undefined) {
+    body.temperature = params.temperature;
+  }
 
   if (params?.top_p !== undefined) {
     body.top_p = params.top_p;
