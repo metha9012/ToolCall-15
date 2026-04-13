@@ -17,7 +17,6 @@
     "tools": true,
     "multiTurn": false,
     "streamingProgress": true,
-    "verification": false,
-    "standaloneWebApp": true
+    "verification": false
   }
 }
