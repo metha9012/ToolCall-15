@@ -1,7 +1,7 @@
 {
-  "name": "llm-toolcall-test",
-  "version": "0.1.0",
-  "description": "ToolCall-15 is a visual benchmark dashboard for evaluating LLM tool use.",
+  "name": "toolcall-15",
+  "version": "1.0.0",
+  "description": "Official BenchLocal Bench Pack for tool use and tool-call loop scoring.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@benchlocal/core": "file:../BenchLocal/packages/benchlocal-core",
-    "@benchlocal/sdk": "file:../BenchLocal/packages/benchlocal-sdk",
+    "@benchlocal/core": "^0.1.0",
+    "@benchlocal/sdk": "^0.1.0",
     "lucide-react": "^1.7.0",
     "next": "latest",
     "react": "latest",

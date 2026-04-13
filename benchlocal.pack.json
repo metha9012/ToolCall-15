@@ -3,10 +3,13 @@
   "protocolVersion": 1,
   "id": "toolcall-15",
   "name": "ToolCall-15",
-  "author": "Steven Lei",
-  "version": "0.1.0",
+  "author": "stevibe",
+  "version": "1.0.0",
   "description": "Tool-use benchmark with 15 fixed scenarios and tool-call loop scoring.",
   "entry": "./dist/benchlocal/index.js",
+  "samplingDefaults": {
+    "temperature": 0
+  },
   "theme": {
     "accent": "#c96b4a"
   },

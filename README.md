@@ -2,9 +2,7 @@
 
 ![ToolCall-15 screenshot](./screenshot.png)
 
-ToolCall-15 is a visual benchmark for comparing LLM tool use. It runs 15 fixed scenarios through an OpenAI-compatible chat completions interface, scores each result deterministically, and renders the full matrix in a live dashboard.
-
-The suite is designed for practical evaluation rather than abstract benchmark math: every scenario has a clear expected behavior, a mocked tool environment, and an inspectable pass, partial, or fail outcome.
+ToolCall-15 is an official BenchLocal Bench Pack for tool use and tool-call loop scoring. The repo keeps one benchmark core and exposes it through a standalone web app, a BenchLocal adapter, and a CLI runner.
 
 ## What It Measures
 
@@ -24,6 +22,25 @@ Each scenario is scored as:
 
 Each category is worth `6` points. The final score is the average of the 5 category percentages, rounded to a whole number.
 
+## Bench Pack Structure
+
+```text
+app/                    Next.js standalone app
+components/             Standalone UI components
+lib/                    Benchmark core, scoring, tool loop, and transport
+benchlocal/             Thin BenchLocal SDK adapter
+cli/                    Non-UI runner
+benchlocal.pack.json  Static install/discovery manifest
+METHODOLOGY.md          Published benchmark methodology
+```
+
+## BenchLocal Adapter
+
+- `benchlocal/index.ts` is the only place that imports `@benchlocal/sdk`.
+- `lib/` stays framework-agnostic and is shared by the web app, CLI, and BenchLocal.
+- `benchlocal.pack.json` is the canonical Bench Pack metadata manifest used for install, inspection, and runtime metadata.
+- Per-pack default sampling belongs on the manifest. ToolCall-15 defaults to `temperature: 0`.
+
 ## Methodology
 
 The benchmark spec is documented in [METHODOLOGY.md](./METHODOLOGY.md) and implemented in [lib/benchmark.ts](./lib/benchmark.ts).
@@ -36,68 +53,7 @@ The benchmark spec is documented in [METHODOLOGY.md](./METHODOLOGY.md) and imple
 - Deterministic: tool results are mocked and the benchmark uses `temperature: 0`.
 - Inspectable: every scenario stores a raw trace so failures can be audited.
 
-### Execution model
-
-For every scenario, each model receives:
-
-1. A shared system prompt.
-2. A fixed benchmark context message that sets the reference date to `2026-03-20 (Friday)` for relative-time tasks.
-3. The scenario user message.
-4. The same universal tool set of 12 functions.
-
-The runner then:
-
-1. Calls the model through `/chat/completions`.
-2. Executes any requested tool calls against deterministic mock handlers.
-3. Appends tool results back into the conversation.
-4. Repeats for up to 8 assistant turns.
-5. Evaluates the final trace against scenario-specific scoring logic.
-
-Provider errors matching `provider returned error` are retried up to 3 times with backoff. Model requests time out after 30 seconds by default, and the timeout can be overridden with `MODEL_REQUEST_TIMEOUT_SECONDS` in `.env`.
-
-### Scoring details
-
-- `pass`: the model followed the preferred tool behavior exactly enough to earn full credit.
-- `partial`: the model was functional but suboptimal or overly conservative.
-- `fail`: the model hallucinated, chose the wrong tool, missed required parameters, or broke the intended flow.
-
-The dashboard also distinguishes timeout failures visually so stalled runs are easy to spot.
-
-## Supported Providers
-
-ToolCall-15 accepts models from five OpenAI-compatible providers:
-
-- `openrouter`
-- `ollama`
-- `llamacpp`
-- `mlx`
-- `lmstudio`
-
-Model configuration uses comma-separated `provider:model` entries.
-
-Examples:
-
-```env
-OPENROUTER_API_KEY=...
-OLLAMA_HOST=http://localhost:11434
-LLAMACPP_HOST=http://localhost:8080
-MLX_HOST=http://localhost:8082
-LMSTUDIO_HOST=http://localhost:1234
-
-LLM_MODELS=openrouter:openai/gpt-4.1,ollama:qwen3.5:4b,llamacpp:local-model,lmstudio:qwen3.5-0.8b
-LLM_MODELS_2=mlx:mlx-community/Qwen3.5-0.8B-8bit
-```
-
-Notes:
-
-- `LLM_MODELS` is the primary table.
-- `LLM_MODELS_2` is an optional secondary table for a separate comparison group.
-- `OLLAMA_HOST`, `LLAMACPP_HOST`, `MLX_HOST`, and `LMSTUDIO_HOST` should be configured as raw hosts. The app normalizes them to the OpenAI-compatible `/v1` base URL.
-- `MODEL_REQUEST_TIMEOUT_SECONDS` controls the per-request timeout for every provider. The default is `30`.
-- Every configured `provider:model` must be unique across both env vars.
-- Provider support is transport-level. Actual benchmark quality still depends on the specific model's tool-calling behavior.
-
-## Getting Started
+## Standalone App
 
 ### Requirements
 
@@ -112,8 +68,6 @@ npm install
 cp .env.example .env
 ```
 
-Then edit `.env` with your providers and models.
-
 ### Run
 
 ```bash
@@ -122,22 +76,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-### Validation
+## BenchLocal and CLI
+
+- BenchLocal build: `npm run build:benchlocal`
+- CLI runner: `npm run cli`
+
+## Validation
 
 ```bash
 npm run lint
 npm run typecheck
+npm run build:benchlocal
 ```
-
-## Dashboard Behavior
-
-- The runner advances scenario-by-scenario, not model-by-model. Every displayed model completes the current scenario before the dashboard moves to the next column.
-- The run button starts all configured models against all 15 scenarios.
-- The config button opens a modal for generation parameters: `temperature`, `top_p`, `top_k`, and `min_p`.
-- Benchmark config is stored in `localStorage` so the same browser keeps your latest settings between sessions.
-- `Shift+Click` a scenario header to rerun only that scenario across all displayed models.
-- Clicking a failed or timed-out cell opens the raw trace for that model and scenario.
-- If `LLM_MODELS_2` is empty, the second table stays hidden.
 
 ## Repository Structure
 
@@ -148,13 +98,6 @@ npm run typecheck
 - [lib/orchestrator.ts](./lib/orchestrator.ts) runs scenarios and captures traces.
 - [lib/llm-client.ts](./lib/llm-client.ts) contains the OpenAI-compatible client adapter.
 - [lib/models.ts](./lib/models.ts) parses provider configuration and model groups.
-
-## Limitations
-
-- This is not a general intelligence benchmark. It isolates tool-use behavior under a fixed tool schema.
-- The suite uses mocked tools, so it measures orchestration quality rather than live external service quality.
-- The benchmark uses one universal system prompt and one deterministic date anchor; prompt-sensitive rankings may change under different instructions.
-- Models are compared through OpenAI-compatible endpoints. Provider-specific extras outside that interface are intentionally ignored.
 
 ## License
 

@@ -1,4 +1,4 @@
-import { createHostHelpers, defineBenchPlugin, definePluginManifest, type ProgressEmitter, type ScenarioResult, type ScenarioRunInput } from "@benchlocal/sdk";
+import { createHostHelpers, defineBenchPack, loadBenchPackManifest, type ProgressEmitter, type ScenarioResult, type ScenarioRunInput } from "@benchlocal/sdk";
 import {
   SCENARIOS,
   SCENARIO_DISPLAY_DETAILS,
@@ -16,26 +16,7 @@ type ModelConfig = {
   apiKey?: string;
 };
 
-const manifest = definePluginManifest({
-  id: "toolcall-15",
-  name: "ToolCall-15",
-  version: "0.1.0",
-  description: "Tool-use benchmark with 15 fixed scenarios and tool-call loop scoring.",
-  entry: "./dist/benchlocal/index.js",
-  samplingDefaults: {
-    temperature: 0
-  },
-  theme: {
-    accent: "#c96b4a"
-  },
-  capabilities: {
-    tools: true,
-    multiTurn: false,
-    streamingProgress: true,
-    verification: false,
-    standaloneWebApp: true
-  }
-});
+const manifest = loadBenchPackManifest(__dirname);
 
 function toModelConfig(input: ScenarioRunInput, baseUrl: string, apiKey?: string): ModelConfig {
   return {
@@ -62,7 +43,7 @@ function toScenarioResult(result: ModelScenarioResult): ScenarioResult & { point
 
 export { manifest };
 
-export default defineBenchPlugin({
+export default defineBenchPack({
   manifest,
 
   async listScenarios() {
