@@ -1,4 +1,9 @@
 # ToolCall-15
+
+`main` now tracks the maintained Bench Pack version of ToolCall-15 for BenchLocal.
+
+If you need the older standalone web app implementation, use the [`legacy/web-app`](https://github.com/stevibe/ToolCall-15/tree/legacy/web-app) branch. That branch is preserved for compatibility, but BenchLocal is now the recommended way to run ToolCall-15 because it provides a unified experience for providers, models, workspaces, histories, and the broader Bench Pack suite.
+
 ToolCall-15 is an official BenchLocal Bench Pack for deterministic tool use and tool-call loop scoring. The repo keeps one benchmark core and exposes it through a BenchLocal adapter and a CLI runner.
 
 ## What It Measures
